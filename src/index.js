@@ -1,79 +1,80 @@
-import './sass/main.scss';
-import PicturesApiService from './js/api';
-import { getGalleryItemMarkup } from './js/tmp';
 import Notiflix from "notiflix";
-
-
-
+import axios from "axios";
 const refs = {
-    searchForm: document.getElementById('search-form'),
-    renderGallery: document.querySelector('.gallery'),
-    loadMoreBtn: document.querySelector('.load-more')
-}
-
-refs.searchForm.addEventListener('submit', onSearch)
-refs.loadMoreBtn.addEventListener('click', onLoad)
-
-const picturesApiService = new PicturesApiService()
-refs.loadMoreBtn.classList.add('is-hidden')
-
-async function onSearch(e) {
-    e.preventDefault()
-    clearPicturesMarkup()
-    picturesApiService.resetPage()
-    picturesApiService.query = e.currentTarget.elements.searchQuery.value
-    window.scrollBy(0, 0);
-    try {
-        const result = await picturesApiService.fetchPictures();
-
-        if (picturesApiService.query === '' || result.hits.length === 0) {
-            clearPicturesMarkup();
-            refs.loadMoreBtn.classList.add('is-hidden');
-            Notiflix.Notify.failure('Sorry, there are no images matching your search query. Please try again.');
-        } else {
-            refs.loadMoreBtn.classList.remove('is-hidden');
-            Notiflix.Notify.success(`"Hooray! We found ${result.totalHits} images."`);
-            picturesMarkup(result.hits);
-        }
-    } catch (error) {
-        console.log(error);
+  form: document.querySelector("#search-form"),
+  loadMoreBtn: document.querySelector(".load-more"),
+  gallery: document.querySelector(".gallery"),
+};
+const cardMarkup = (card) => {
+  const markup = card
+    .map(({ tags, webformatURL, views, downloads, likes }) => {
+      return `<div class="photo-card">
+<img width="200"src="${webformatURL}" alt="${tags}" loading="lazy" />
+<div class="info">
+  <p class="info-item">
+    <b>Likes ${likes}</b>
+  </p>
+  <p class="info-item">
+    <b>Views ${views}</b>
+  </p>
+  <p class="info-item">
+    <b>Downloads ${downloads}</b>
+  </p>
+</div>
+</div>`;
+    })
+    .join("");
+  return refs.gallery.insertAdjacentHTML("beforeend", markup);
+};
+let page = 1;
+let querySearch = "";
+let totalHits = 0;
+let currentHits = 0;
+refs.loadMoreBtn.disabled = true;
+async function getCards(query, page) {
+  const search = new URLSearchParams({
+    key: `23383407-e7cc8d35786a3d378c61a119c`,
+    q: query,
+    image_type: `photo`,
+    orientation: `horizontal`,
+    safesearch: true,
+    per_page: 40,
+    page,
+  });
+  try {
+    const res = await axios.get(`https://pixabay.com/api/?${search}`);
+    cardMarkup(res.data.hits);
+    totalHits = await res.data.totalHits;
+    if (res.data.hits.length === 0) {
+      Notiflix.Notify.failure(
+        "Извините, но по Вашему запросу картинок не найдено. Попробуйте ещё раз!"
+      );
     }
+  } catch (error) {
+    Notiflix.Notify.failure("Упс! Ошибочка😱. Попробуйте позже.");
+  }
 }
-
-async function onLoad() {
-
-    try {
-        const result = await picturesApiService.fetchPictures();
-        picturesMarkup(result.hits);
-
-        const lenghtHits = refs.renderGallery.querySelectorAll('.photo-card').length
-
-        if (lenghtHits >= result.totalHits) {
-            Notiflix.Notify.failure('"We are sorry, but you have reached the end of search results."');
-            refs.loadMoreBtn.classList.add('is-hidden');
-        }
-
-        const { height: cardHeight } = refs.renderGallery
-            .firstElementChild.getBoundingClientRect();
-
-
-        refs.renderGallery.scrollBy({
-            top: cardHeight * 2,
-            behavior: 'smooth',
-        });
-
-
-
-    }
-    catch (error) {
-        console.log(error)
-    }
-}
-
-function picturesMarkup(collection) {
-    refs.renderGallery.insertAdjacentHTML('beforeend', getGalleryItemMarkup(collection))
-}
-
-function clearPicturesMarkup() {
-    refs.renderGallery.innerHTML = ''
-}
+const searchInput = (e) => {
+  refs.loadMoreBtn.disabled = false;
+  page = 1;
+  refs.gallery.innerHTML = "";
+  e.preventDefault();
+  querySearch = e.target.elements.searchQuery.value.trim();
+  const get = getCards(querySearch, page);
+  currentHits += 40;
+};
+const searchButton = (e) => {
+  if (totalHits >= currentHits) {
+    currentHits += 40;
+    page += 1;
+    const get = getCards(querySearch, page);
+  } else {
+    Notiflix.Notify.failure(
+      `К сожалению, вы достигли конца результатов.`
+    );
+    refs.loadMoreBtn.disabled = true;
+  }
+  console.log(currentHits);
+};
+refs.form.addEventListener("submit", searchInput);
+refs.loadMoreBtn.addEventListener("click", searchButton);
